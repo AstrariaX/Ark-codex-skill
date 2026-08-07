@@ -46,5 +46,6 @@ python scripts/process_webm.py --src <project-dir>/work/webm --name "<operator>"
 - The PRTS `Default` WebM export is often a broken 110-byte file. Keep it in `webm/` for reference, but do not map it to a state.
 - If PRTS changes its viewer DOM, update `references/prts-ui.md` and the selectors inside `scripts/prts_export.py`.
 - The generated app remembers position, size, and speed per pet, supports a mini mode, and can auto-hide in fullscreen.
+- The generated app supports corner-handle drag resizing and left-button plus mouse-wheel scaling; scale is persisted per pet.
 - A lightweight watcher spawns a separate tray process while ChatGPT/Codex runs. The tray offers `显示桌宠`, `隐藏桌宠` (closes the pet), `开机自启动`, and `退出` (closes pet, tray, and watcher). The tray disappears when the app closes.
 - The app template ships with 予愿安洁莉娜 as the initial pet, so a fresh project can launch immediately.
