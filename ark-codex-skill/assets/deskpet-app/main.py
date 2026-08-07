@@ -8,7 +8,7 @@ import time
 import winreg
 from ctypes import wintypes
 
-from PySide6.QtCore import QRectF, Qt, QTimer
+from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -17,6 +17,7 @@ from PySide6.QtGui import (
     QGuiApplication,
     QImage,
     QPainter,
+    QPen,
 )
 from PySide6.QtWidgets import (
     QApplication,
@@ -52,6 +53,10 @@ PAD = 12
 STATUS_H = 46
 MIN_SCALE = 0.3
 MAX_SCALE = 2.0
+RESIZE_HANDLE_SIZE = 22
+RESIZE_HANDLE_MARGIN = 4
+RESIZE_PIXELS_PER_SCALE = 400.0
+WHEEL_SCALE_STEP = 0.1
 
 SPEED_OPTIONS = [
     ("0.5x", 0.5),
@@ -378,6 +383,13 @@ class PetWindow(QWidget):
         self.status_text = "Codex 待机"
         self.status_active = False
         self.tray_hidden = False
+        self.handles_visible = False
+        self.hover_handle = None
+        self.resize_drag = False
+        self.resize_side = None
+        self.resize_start_global = None
+        self.resize_start_scale = self.scale
+        self.resize_anchor = None
 
         self.timer = QTimer(self)
         self.timer.setInterval(self.tick_ms())
@@ -443,7 +455,7 @@ class PetWindow(QWidget):
     def state_info(self, name):
         return MANIFEST["states"][name]
 
-    def apply_geometry(self):
+    def apply_geometry(self, anchor=None):
         info = self.state_info(self.state)
         old_x, old_y = self.x(), self.y()
         old_w, old_h = self.width(), self.height()
@@ -452,12 +464,20 @@ class PetWindow(QWidget):
         status_extra = STATUS_H if self.show_status else 0
         height = int((by2 - by + 1) * self.scale) + PAD * 2 + status_extra
         self.resize(width, height)
-        bottom_center_x = old_x + old_w / 2
-        bottom_y = old_y + old_h
-        self.move(
-            int(bottom_center_x - width / 2),
-            int(bottom_y - height),
-        )
+        # 手柄缩放时固定对侧底角。
+        if anchor is None:
+            bottom_center_x = old_x + old_w / 2
+            bottom_y = old_y + old_h
+            self.move(
+                int(bottom_center_x - width / 2),
+                int(bottom_y - height),
+            )
+        else:
+            side, anchor_x, anchor_y = anchor
+            if side == "left":
+                self.move(int(anchor_x - width), int(anchor_y - height))
+            else:
+                self.move(int(anchor_x), int(anchor_y - height))
 
     def set_state(self, name, hold=False):
         if name not in MANIFEST["states"]:
@@ -510,6 +530,101 @@ class PetWindow(QWidget):
             self.frame_index = (self.frame_index + 1) % count
         self.update()
 
+    def resize_handle_rect(self, side):
+        y = self.height() - RESIZE_HANDLE_SIZE - RESIZE_HANDLE_MARGIN
+        if side == "left":
+            x = RESIZE_HANDLE_MARGIN
+        else:
+            x = self.width() - RESIZE_HANDLE_SIZE - RESIZE_HANDLE_MARGIN
+        return QRectF(x, y, RESIZE_HANDLE_SIZE, RESIZE_HANDLE_SIZE)
+
+    def resize_handle_at(self, position):
+        for side in ("left", "right"):
+            if self.resize_handle_rect(side).contains(position):
+                return side
+        return None
+
+    def update_resize_cursor(self, side):
+        if self.resize_drag:
+            side = self.resize_side
+        elif self.press_global is not None:
+            side = None
+        if side == "left":
+            self.setCursor(Qt.SizeFDiagCursor)
+        elif side == "right":
+            self.setCursor(Qt.SizeBDiagCursor)
+        else:
+            self.setCursor(Qt.ArrowCursor)
+
+    def begin_resize(self, side, global_pos):
+        self.resize_drag = True
+        self.resize_side = side
+        self.resize_start_global = global_pos
+        self.resize_start_scale = self.scale
+        bottom_y = self.y() + self.height()
+        if side == "left":
+            anchor_x = self.x() + self.width()
+        else:
+            anchor_x = self.x()
+        self.resize_anchor = (side, anchor_x, bottom_y)
+        self.handles_visible = True
+        self.hover_handle = side
+        self.sit_timer.stop()
+        self.sleep_timer.stop()
+        self.update_resize_cursor(side)
+
+    def update_resize_drag(self, global_pos):
+        if not self.resize_drag or self.resize_start_global is None:
+            return
+        dx = global_pos.x() - self.resize_start_global.x()
+        dy = global_pos.y() - self.resize_start_global.y()
+        if self.resize_side == "left":
+            delta = (-dx + dy) / 2.0
+        else:
+            delta = (dx + dy) / 2.0
+        value = self.resize_start_scale + delta / RESIZE_PIXELS_PER_SCALE
+        self.set_scale(value, anchor=self.resize_anchor, save=False)
+
+    def finish_resize(self):
+        if not self.resize_drag:
+            return
+        self.resize_drag = False
+        self.resize_side = None
+        self.resize_start_global = None
+        self.resize_anchor = None
+        self.save_pet_state()
+        self.update_resize_cursor(self.hover_handle)
+
+    def paint_resize_handles(self, painter):
+        for side in ("left", "right"):
+            rect = self.resize_handle_rect(side)
+            active = side == self.hover_handle or side == self.resize_side
+            painter.save()
+            painter.setBrush(QColor(20, 20, 20, 190 if active else 135))
+            painter.setPen(QColor(255, 255, 255, 220))
+            painter.drawRoundedRect(rect, 4, 4)
+            grip = rect.adjusted(5, 5, -5, -5)
+            painter.setPen(QPen(QColor(255, 255, 255, 235), 2))
+            if side == "left":
+                painter.drawLine(
+                    QPointF(grip.left(), grip.bottom()),
+                    QPointF(grip.right(), grip.top()),
+                )
+                painter.drawLine(
+                    QPointF(grip.left() + 4, grip.bottom()),
+                    QPointF(grip.right(), grip.top() + 4),
+                )
+            else:
+                painter.drawLine(
+                    QPointF(grip.left(), grip.top()),
+                    QPointF(grip.right(), grip.bottom()),
+                )
+                painter.drawLine(
+                    QPointF(grip.left() + 4, grip.top()),
+                    QPointF(grip.right(), grip.bottom() - 4),
+                )
+            painter.restore()
+
     def paintEvent(self, event):
         info = self.state_info(self.state)
         bx, by, _, _ = info["bbox"]
@@ -552,8 +667,18 @@ class PetWindow(QWidget):
                 elided,
             )
 
+        if self.handles_visible or self.resize_drag:
+            self.paint_resize_handles(painter)
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
+            handle = self.resize_handle_at(event.position())
+            if handle is not None:
+                self.begin_resize(
+                    handle, event.globalPosition().toPoint()
+                )
+                event.accept()
+                return
             self.drag = False
             self.pre_drag_state = self.state
             self.pre_drag_hold = self.hold_state
@@ -562,7 +687,16 @@ class PetWindow(QWidget):
             self.press_time = time.monotonic()
 
     def mouseMoveEvent(self, event):
+        if not self.resize_drag:
+            self.hover_handle = self.resize_handle_at(event.position())
+            self.handles_visible = True
+            self.update_resize_cursor(self.hover_handle)
+        if self.resize_drag:
+            self.update_resize_drag(event.globalPosition().toPoint())
+            event.accept()
+            return
         if self.press_global is None:
+            self.update()
             return
         if self.locked:
             return
@@ -591,6 +725,10 @@ class PetWindow(QWidget):
     def mouseReleaseEvent(self, event):
         if event.button() != Qt.LeftButton:
             return
+        if self.resize_drag:
+            self.finish_resize()
+            event.accept()
+            return
         if self.drag:
             self.drag = False
             self.press_global = None
@@ -618,6 +756,26 @@ class PetWindow(QWidget):
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.toggle_mini()
+
+    def wheelEvent(self, event):
+        held = bool(event.buttons() & Qt.LeftButton)
+        held = held or bool(QApplication.mouseButtons() & Qt.LeftButton)
+        held = held or self.press_global is not None
+        delta = event.angleDelta().y()
+        if held and delta:
+            self.set_scale(self.scale + delta / 120.0 * WHEEL_SCALE_STEP)
+            self.handles_visible = True
+            event.accept()
+            return
+        super().wheelEvent(event)
+
+    def leaveEvent(self, event):
+        if not self.resize_drag:
+            self.handles_visible = False
+            self.hover_handle = None
+            self.update_resize_cursor(None)
+            self.update()
+        super().leaveEvent(event)
 
     def contextMenuEvent(self, event):
         menu = QMenu(self)
@@ -688,11 +846,12 @@ class PetWindow(QWidget):
     def scale_down(self):
         self.set_scale(self.scale - 0.1)
 
-    def set_scale(self, value):
-        self.scale = max(MIN_SCALE, min(MAX_SCALE, round(value, 1)))
-        self.apply_geometry()
+    def set_scale(self, value, anchor=None, save=True):
+        self.scale = max(MIN_SCALE, min(MAX_SCALE, round(value, 2)))
+        self.apply_geometry(anchor=anchor)
         self.settings["scale"] = self.scale
-        self.save_pet_state()
+        if save:
+            self.save_pet_state()
         self.update()
 
     def select_pet(self, name):
