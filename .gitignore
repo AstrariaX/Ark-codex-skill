@@ -8,3 +8,22 @@ work/
 *.log
 *.pid
 *.flag
+settings.json
+settings.json.tmp
+.deps/
+.pytest_cache/
+
+# Local credentials and private Codex session data
+.env
+.env.*
+!.env.example
+auth.json
+credentials.json
+*.pem
+*.key
+*.p12
+*.pfx
+.codex/
+sessions/
+archived_sessions/
+rollout-*.jsonl

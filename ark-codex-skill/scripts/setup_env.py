@@ -25,7 +25,12 @@ def main():
     args = parser.parse_args()
 
     venv = Path(args.project) / ".venv"
-    run([args.python, "-m", "venv", str(venv)])
+    # Preserve existing environments on failure; permission errors do not
+    # imply Python incompatibility.
+    try:
+        run([args.python, "-m", "venv", str(venv)])
+    except subprocess.CalledProcessError:
+        sys.exit("venv/ensurepip failed. Check the preceding error and directory permissions; the existing environment was preserved.")
     py = venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     run([str(py), "-m", "pip", "install", "--upgrade", "pip"])
     run([str(py), "-m", "pip", "install", "PySide6", "playwright"])

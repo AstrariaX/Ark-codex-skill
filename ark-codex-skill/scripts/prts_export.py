@@ -3,6 +3,7 @@
 
 import argparse
 import os
+import re
 import sys
 import urllib.parse
 
@@ -34,10 +35,8 @@ def find_chrome():
 
 def select_option(page, select, text):
     select.click()
-    page.wait_for_timeout(500)
-    option = page.locator(".n-base-select-option", has_text=text).first
-    if option.count() == 0:
-        raise RuntimeError(f"option not found: {text}")
+    option = page.locator(".n-base-select-option:visible").filter(has_text=re.compile(r"^" + re.escape(text) + r"$")).first
+    option.wait_for(state="visible", timeout=60000)
     option.click()
     page.wait_for_timeout(1200)
 
@@ -55,7 +54,7 @@ def find_download_button(page):
 
 def open_operator_page(page, operator):
     url = "https://prts.wiki/w/" + urllib.parse.quote(operator)
-    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+    page.goto(url, wait_until="domcontentloaded", timeout=90000)
     page.wait_for_timeout(2500)
     if page.locator("button", has_text=LOAD_BTN).count() == 0:
         search_url = (
@@ -103,12 +102,13 @@ def run_export(operator, skin, out_dir):
             load_btn = page.locator("button", has_text=LOAD_BTN).first
             load_btn.scroll_into_view_if_needed()
             load_btn.click()
-            page.wait_for_timeout(5000)
+            page.locator(".n-select").nth(2).wait_for(state="visible", timeout=60000)
 
             skin_select = page.locator(".n-select").nth(0)
             select_option(page, skin_select, skin or "\u9ed8\u8ba4")
             model_select = page.locator(".n-select").nth(1)
             select_option(page, model_select, JIANJI)
+            page.wait_for_function("() => document.querySelectorAll('.n-select')[2]?.innerText.trim().length > 0", timeout=90000)
 
             skin_label = skin or "\u9ed8\u8ba4"
             for anim in ANIMATIONS:
@@ -119,7 +119,7 @@ def run_export(operator, skin, out_dir):
                 with page.expect_download(timeout=120000) as info:
                     download.click()
                 dl = info.value
-                ext = os.path.splitext(dl.suggested_filename())[1] or ".webm"
+                ext = os.path.splitext(dl.suggested_filename)[1] or ".webm"
                 out_path = os.path.join(
                     out_dir, f"{operator}-{skin_label}-基建-{anim}-x1{ext}"
                 )
@@ -136,6 +136,8 @@ def run_export(operator, skin, out_dir):
 
 
 def main():
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser()
     parser.add_argument("operator", help="Arknights operator name")
     parser.add_argument("--skin", default=None, help="skin name; default = 默认")

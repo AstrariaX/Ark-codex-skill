@@ -1,8 +1,10 @@
 # Ark Codex Skill
 
+> 增强版位于 `feat/event-driven-deskpet-yao` 分支，`main` 暂未包含这些改进。包含全局任务监听、动作联动、中英文透明居中字幕、完成字幕10秒隐藏、防重复启动、窗口位置恢复和“遥”素材库。详见 [增强功能与验证](ENHANCEMENTS.md) 和 [发布检查](RELEASE_CHECKLIST.md)。这是独立Python桌宠，不是Codex原生Custom pets。
+
 用AI辅助制作的一个用于制作《明日方舟》透明桌面宠物（Codex 桌宠）的 Codex skill。给它一个干员名（可选皮肤名），它会自动从 PRTS Wiki 导出该干员的基建 WebM 动画，转换成带透明通道的 PNG 帧，生成桌宠并加入桌宠库。
 
-> 仓库：[AstrariaX/Ark-codex-skill](https://github.com/AstrariaX/Ark-codex-skill)
+> 增强版：[peripheral6/Ark-codex-skill](https://github.com/peripheral6/Ark-codex-skill/tree/feat/event-driven-deskpet-yao)；原作者：[AstrariaX/Ark-codex-skill](https://github.com/AstrariaX/Ark-codex-skill)。独立运行仓库：[ark-deskpet](https://github.com/peripheral6/ark-deskpet)。
 
 ## 功能特性
 
@@ -83,7 +85,7 @@ ark-codex-skill/
 直接对 Codex 说：
 
 ```text
-安装 GitHub 仓库 AstrariaX/Ark-codex-skill 里的 ark-codex-skill skill
+安装 GitHub 仓库 peripheral6/Ark-codex-skill 的 feat/event-driven-deskpet-yao 分支中的 ark-codex-skill skill
 ```
 
 也可以手动安装：把仓库里的 `ark-codex-skill/` 目录复制到 `~/.codex/skills/`。
@@ -91,7 +93,7 @@ ark-codex-skill/
 如果使用 Codex 的 skill 安装器，也可以这样安装：
 
 ```text
---repo AstrariaX/Ark-codex-skill --path ark-codex-skill
+--repo peripheral6/Ark-codex-skill --ref feat/event-driven-deskpet-yao --path ark-codex-skill
 ```
 
 ### 第二步：调用
@@ -110,7 +112,15 @@ ark-codex-skill/
 
 不写皮肤就是默认原皮。制作完成后右键小人 -> 桌宠库，可以随时切换已入库的角色。
 
-注意：项目初始自带予愿安洁莉娜，可以直接双击 `启动桌宠.bat`；想加入其他角色时，再按上面的流程制作。
+注意：项目自带予愿安洁莉娜与遥。先完成依赖安装，再双击 `启动桌宠.bat`。从本分支仓库根目录生成遥：
+
+```powershell
+python ark-codex-skill/scripts/scaffold_deskpet.py --target my-pet --pet 遥
+python ark-codex-skill/scripts/setup_env.py my-pet --skip-browser
+.\my-pet\启动桌宠.bat
+```
+
+使用已打包角色不需要浏览器；从PRTS导出新角色时不要跳过浏览器安装。
 
 ## 桌宠功能
 
@@ -118,7 +128,7 @@ ark-codex-skill/
 - 双击切换迷你模式（隐藏/显示字幕条）
 - 拖动播放走路动画，松手恢复之前状态
 - 右键菜单：坐下 / 放松 / 睡觉 / 桌宠库 / 锁定 / 设置 / 放大 / 缩小 / 退出
-- 头顶字幕：Codex 运行状态、最近任务、模型、运行时长、Token 用量、最近完成时间
+- 头顶字幕：仅显示Codex状态，可中英文切换，透明居中显示
 - 每个角色独立记住位置、大小、动作倍速
 - 迷你模式、全屏应用自动隐藏
 - 可设置随 ChatGPT / Codex 启动和关闭
@@ -132,7 +142,11 @@ PRTS 页面改版会影响脚本。先看 `ark-codex-skill/references/prts-ui.md
 
 ### 打开后没有看到小人
 
-运行 `my-deskpet/调试运行.bat`，把控制台报错或 `pet_error.log` 内容发出来。
+再次运行启动脚本会显示已有桌宠，并将窗口校正到屏幕内。若仍不可见，运行 `my-deskpet/调试运行.bat` 检查控制台报错或 `pet_error.log`。不要只凭PID文件存在判断窗口已显示。
+
+### 其他任务没有触发动作
+
+在桌宠设置中清空跟踪任务ID，并开启动作联动。留空代表全部本地任务，不是当前打开的页面。云端或未写本地日志的任务不在监听范围内。完成字幕显示10秒后隐藏。
 
 ### 需要手动从网站下载素材
 

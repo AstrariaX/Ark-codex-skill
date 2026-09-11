@@ -1,0 +1,61 @@
+{
+  "fps": 20,
+  "size": 1000,
+  "states": {
+    "interact": {
+      "duration": 4686,
+      "count": 94,
+      "bbox": [
+        334,
+        388,
+        654,
+        812
+      ],
+      "source": "遥-默认-基建-Interact-x1.webm"
+    },
+    "move": {
+      "duration": 7957,
+      "count": 159,
+      "bbox": [
+        336,
+        386,
+        654,
+        804
+      ],
+      "source": "遥-默认-基建-Move-x1.webm"
+    },
+    "idle": {
+      "duration": 9931,
+      "count": 199,
+      "bbox": [
+        348,
+        392,
+        656,
+        802
+      ],
+      "source": "遥-默认-基建-Relax-x1.webm"
+    },
+    "sit": {
+      "duration": 9928,
+      "count": 199,
+      "bbox": [
+        348,
+        520,
+        654,
+        898
+      ],
+      "source": "遥-默认-基建-Sit-x1.webm"
+    },
+    "sleep": {
+      "duration": 9932,
+      "count": 199,
+      "bbox": [
+        288,
+        484,
+        600,
+        810
+      ],
+      "source": "遥-默认-基建-Sleep-x1.webm"
+    }
+  }
+}

@@ -53,7 +53,13 @@ async function capture(src) {
   function step(now, meta) {
     ctx.clearRect(0, 0, SIZE, SIZE);
     ctx.drawImage(v, 0, 0, SIZE, SIZE);
-    const data = ctx.getImageData(0, 0, SIZE, SIZE).data;
+    const pixels = ctx.getImageData(0, 0, SIZE, SIZE);
+    const data = pixels.data;
+    // WebM alpha compression can leave nearly-transparent colored speckles.
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] <= 10) data[i] = 0;
+    }
+    ctx.putImageData(pixels, 0, 0);
     for (let y = 0; y < SIZE; y += 2) {
       for (let x = 0; x < SIZE; x += 2) {
         const a = data[(y * SIZE + x) * 4 + 3];

@@ -21,6 +21,8 @@ def main():
     args = parser.parse_args()
 
     target = Path(args.target)
+    if target.exists() and any(target.iterdir()):
+        parser.error("target must be empty; refusing to overwrite an existing deskpet")
     target.mkdir(parents=True, exist_ok=True)
     for item in APP_TEMPLATE.iterdir():
         dest = target / item.name
@@ -44,6 +46,9 @@ def main():
         "pet": args.pet or "予愿安洁莉娜",
         "pet_states": {},
         "autostart_with_codex": False,
+        "subtitle_language": "zh",
+        "status_actions": True,
+        "monitor_thread_id": None,
     }
     (target / "settings.json").write_text(
         json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8"

@@ -7,6 +7,8 @@ description: Create or extend transparent desktop pets for Arknights operators u
 
 Build a transparent Codex deskpet from PRTS operator models and add it to a reusable deskpet library.
 
+This skill generates a standalone Windows Python app, not a Codex Settings > Custom pets import. Explain that distinction when users ask for a native Codex pet.
+
 ## Workflow
 
 1. Confirm operator name and optional skin. If no skin is given, use the default (默认).
@@ -24,10 +26,10 @@ python scripts/scaffold_deskpet.py --target <project-dir> --pet "<operator>"
 python scripts/setup_env.py <project-dir>
 
 # 2. Export WebM from PRTS (default skin unless --skin is given)
-python scripts/prts_export.py "<operator>" [--skin "<skin>"] --out <project-dir>/work/webm
+<project-dir>/.venv/Scripts/python.exe scripts/prts_export.py "<operator>" [--skin "<skin>"] --out <project-dir>/work/webm
 
 # 3. Convert WebM to transparent frames and add to the pet library
-python scripts/process_webm.py --src <project-dir>/work/webm --name "<operator>" --out <project-dir>/pets/<operator>
+<project-dir>/.venv/Scripts/python.exe scripts/process_webm.py --src <project-dir>/work/webm --name "<operator>" --out <project-dir>/pets/<operator>
 
 # 4. Launch
 <project-dir>/启动桌宠.bat
@@ -48,3 +50,9 @@ python scripts/process_webm.py --src <project-dir>/work/webm --name "<operator>"
 - The generated app remembers position, size, and speed per pet, supports a mini mode, and can auto-hide in fullscreen.
 - A lightweight watcher spawns a separate tray process while ChatGPT/Codex runs. The tray offers `显示桌宠`, `隐藏桌宠` (closes the pet), `开机自启动`, and `退出` (closes pet, tray, and watcher). The tray disappears when the app closes.
 - The app template ships with 予愿安洁莉娜 as the initial pet, so a fresh project can launch immediately.
+- 遥 (default outfit) is also bundled: scaffold with `--pet "遥"` to use it without downloading again.
+- Generated apps inherit event-driven monitoring and status-linked actions. Background polling runs every 250ms and discovers logs about once per second. A blank task ID monitors all local tasks: any active task keeps the running action; only after all finish does the last terminal state display. Users may set a task ID to restrict monitoring; never embed the generating conversation's ID in a shared template.
+- Completed captions disappear after 10 seconds and return on a new event. A Windows named mutex prevents duplicate instances of the same installation; another launch reveals the existing pet. Window placement is clamped to an available screen on launch, show, and animation size changes.
+- Settings include an action-link toggle and Chinese/English status captions. Captions are status-only, centered, transparent, and wrap if needed; task text is not translated.
+- Completion/interruption are based on explicit log events, not file age. A crashed Codex process without a terminal event cannot be reliably detected from the rollout alone. Only local rollout files are read; ChatGPT process detection does not provide ChatGPT task telemetry.
+- Scaffold into an empty directory. Do not overwrite existing settings or virtual environments when preparing updates.
