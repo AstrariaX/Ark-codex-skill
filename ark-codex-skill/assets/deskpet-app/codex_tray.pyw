@@ -17,7 +17,7 @@ DISABLED_FLAG = os.path.join(BASE_DIR, "pet_disabled.flag")
 PYW_PATH = os.path.join(BASE_DIR, ".venv", "Scripts", "pythonw.exe")
 WATCHER_PATH = os.path.join(BASE_DIR, "codex_pet_launcher.pyw")
 RUN_KEY_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"
-RUN_VALUE_NAME = "CodexDeskpetWatcher"
+RUN_VALUE_NAME = "ClaudeCodeDeskpetWatcher"
 
 
 def write_flag(path):
@@ -121,7 +121,7 @@ def main():
         app = QApplication(sys.argv)
         app.setQuitOnLastWindowClosed(False)
         tray = QSystemTrayIcon(make_icon(), app)
-        tray.setToolTip("Ark Codex 桌宠")
+        tray.setToolTip("Ark 桌宠")
         menu = QMenu()
         show_action = QAction("显示桌宠", menu, triggered=show_pet)
         close_action = QAction("隐藏桌宠", menu, triggered=close_pet)

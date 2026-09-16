@@ -19,22 +19,6 @@ def _tail(path, size=262144):
     return data
 
 
-def _message_text(content):
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts = []
-        for item in content:
-            if not isinstance(item, dict):
-                continue
-            if item.get("type") in ("input_text", "output_text", "text"):
-                text = item.get("text", "")
-                if isinstance(text, str):
-                    parts.append(text)
-        return "".join(parts)
-    return ""
-
-
 def _clean(text, limit=80):
     text = " ".join(text.split())
     if len(text) > limit:
@@ -42,7 +26,72 @@ def _clean(text, limit=80):
     return text
 
 
-def _user_text(payload):
+def _extract_text(content):
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                t = item.get("text", "")
+                if isinstance(t, str):
+                    parts.append(t)
+        return "".join(parts)
+    return ""
+
+
+def _find_cc_session():
+    root = os.path.join(os.path.expanduser("~"), ".claude", "projects")
+    files = glob.glob(os.path.join(root, "**", "*.jsonl"), recursive=True)
+    files = [f for f in files if "subagent" not in f]
+    if not files:
+        return None
+    return max(files, key=os.path.getmtime)
+
+
+def _find_codex_session():
+    root = os.path.join(os.path.expanduser("~"), ".codex", "sessions")
+    files = glob.glob(os.path.join(root, "**", "rollout-*.jsonl"), recursive=True)
+    if not files:
+        return None
+    return max(files, key=os.path.getmtime)
+
+
+def _parse_cc(path):
+    mtime = os.path.getmtime(path)
+    active = (time.time() - mtime) < 30
+    task = None
+    model = None
+    try:
+        for line in _tail(path).splitlines():
+            obj = json.loads(line)
+            otype = obj.get("type")
+            if otype in ("human", "user"):
+                msg = obj.get("message", {})
+                content = msg.get("content", "") if isinstance(msg, dict) else ""
+                text = _extract_text(content)
+                if text and "<system-reminder>" not in text:
+                    task = _clean(text)
+            if otype == "assistant":
+                m = obj.get("model") or obj.get("message", {}).get("model")
+                if m:
+                    model = str(m)
+    except Exception:
+        pass
+    return {
+        "active": active,
+        "task": task,
+        "model": model,
+        "progress": None,
+        "elapsed": None,
+        "tokens": None,
+        "last_finished": None,
+        "source": "cc",
+        "mtime": mtime,
+    }
+
+
+def _user_text_codex(payload):
     if payload.get("type") == "user_message":
         text = payload.get("message")
         if isinstance(text, str):
@@ -51,24 +100,11 @@ def _user_text(payload):
     if isinstance(content, str):
         return content
     if isinstance(content, list):
-        return _message_text(content)
+        return _extract_text(content)
     return ""
 
 
-def get_codex_status():
-    root = os.path.join(os.path.expanduser("~"), ".codex", "sessions")
-    files = glob.glob(os.path.join(root, "**", "rollout-*.jsonl"), recursive=True)
-    if not files:
-        return {
-            "active": False,
-            "task": None,
-            "model": None,
-            "progress": None,
-            "elapsed": None,
-            "tokens": None,
-            "last_finished": None,
-        }
-    path = max(files, key=os.path.getmtime)
+def _parse_codex(path):
     mtime = os.path.getmtime(path)
     task = None
     model = None
@@ -99,7 +135,7 @@ def get_codex_status():
                 None,
                 "user",
             ):
-                text = _user_text(payload)
+                text = _user_text_codex(payload)
                 if (
                     text
                     and "<environment_context>" not in text
@@ -141,4 +177,39 @@ def get_codex_status():
             if last_finished is not None
             else None
         ),
+        "source": "codex",
+        "mtime": mtime,
     }
+
+
+def get_codex_status():
+    empty = {
+        "active": False,
+        "task": None,
+        "model": None,
+        "progress": None,
+        "elapsed": None,
+        "tokens": None,
+        "last_finished": None,
+    }
+    cc_path = _find_cc_session()
+    codex_path = _find_codex_session()
+
+    results = []
+    if cc_path:
+        results.append(_parse_cc(cc_path))
+    if codex_path:
+        results.append(_parse_codex(codex_path))
+
+    if not results:
+        return empty
+
+    active = [r for r in results if r["active"]]
+    if active:
+        best = max(active, key=lambda r: r["mtime"])
+    else:
+        best = max(results, key=lambda r: r["mtime"])
+
+    best.pop("source", None)
+    best.pop("mtime", None)
+    return best

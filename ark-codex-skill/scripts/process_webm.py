@@ -18,11 +18,14 @@ try:
 except ImportError:
     sys.exit("playwright is required: run 'pip install playwright' first")
 
-FPS = 20
+FPS = 60
 SIZE = 1000
 STATE_MAP = [
     ("Relax", "idle"),
+    ("Idle", "idle"),
     ("Interact", "interact"),
+    ("Combat", "interact"),
+    ("Special", "interact"),
     ("Move", "move"),
     ("Sit", "sit"),
     ("Sleep", "sleep"),
@@ -53,7 +56,8 @@ async function capture(src) {
   function step(now, meta) {
     ctx.clearRect(0, 0, SIZE, SIZE);
     ctx.drawImage(v, 0, 0, SIZE, SIZE);
-    const data = ctx.getImageData(0, 0, SIZE, SIZE).data;
+    const imgData = ctx.getImageData(0, 0, SIZE, SIZE);
+    const data = imgData.data;
     for (let y = 0; y < SIZE; y += 2) {
       for (let x = 0; x < SIZE; x += 2) {
         const a = data[(y * SIZE + x) * 4 + 3];
@@ -65,6 +69,10 @@ async function capture(src) {
         }
       }
     }
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] < 15) data[i] = 0;
+    }
+    ctx.putImageData(imgData, 0, 0);
     frames.push({ t: meta.mediaTime, url: c.toDataURL('image/png') });
     if (!v.ended) v.requestVideoFrameCallback(step);
   }
@@ -126,9 +134,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
-def run(src, name, out):
+def run(src, name, out, group=None):
     pet_dir = out
-    frames_dir = os.path.join(pet_dir, "frames")
+    group_label = group or "基建"
+    frames_dir = os.path.join(pet_dir, "frames", group_label)
     webm_dir = os.path.join(pet_dir, "webm")
     os.makedirs(frames_dir, exist_ok=True)
     os.makedirs(webm_dir, exist_ok=True)
@@ -137,32 +146,65 @@ def run(src, name, out):
     for fname in sorted(os.listdir(src)):
         if not fname.lower().endswith(".webm"):
             continue
+        if name not in fname:
+            continue
+        if group and group not in fname:
+            continue
         full = os.path.join(src, fname)
         if os.path.getsize(full) < 1000:
             print("skip broken webm:", fname)
             continue
+        base = os.path.splitext(fname)[0]
+        parts = base.split("-")
+        anim = parts[-2] if len(parts) >= 3 else parts[-1]
+        anim_lower = anim.lower()
+        matched = False
         for token, state in STATE_MAP:
-            if token.lower() in fname.lower():
+            if token.lower() == anim_lower:
                 state_files[state] = fname
+                matched = True
                 break
+        if not matched:
+            state_files[anim_lower] = fname
     if not state_files:
         sys.exit("no valid WebM files found in " + src)
 
     for fname in state_files.values():
-        shutil.copy2(os.path.join(src, fname), os.path.join(webm_dir, fname))
+        src_path = os.path.join(src, fname)
+        dst_path = os.path.join(webm_dir, fname)
+        if os.path.abspath(src_path) != os.path.abspath(dst_path):
+            shutil.copy2(src_path, dst_path)
+
+    manifest_path = os.path.join(pet_dir, "manifest.json")
+    if os.path.isfile(manifest_path):
+        with open(manifest_path, encoding="utf-8") as f:
+            manifest = json.load(f)
+        if "states" in manifest and "groups" not in manifest:
+            manifest = {"fps": manifest.get("fps", FPS),
+                        "size": manifest.get("size", SIZE),
+                        "groups": {"基建": manifest["states"]}}
+    else:
+        manifest = {"fps": FPS, "size": SIZE, "groups": {}}
+    manifest["fps"] = FPS
+
+    group_states = {}
 
     with sync_playwright() as p:
         chrome = find_chrome()
+        launch_args = ["--autoplay-policy=no-user-gesture-required"]
         if chrome:
-            browser = p.chromium.launch(executable_path=chrome, headless=True)
+            browser = p.chromium.launch(
+                executable_path=chrome,
+                headless=True,
+                args=launch_args,
+            )
         else:
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(headless=True, args=launch_args)
         handler = functools.partial(Handler, directory=src)
         httpd = socketserver.ThreadingTCPServer(("127.0.0.1", 0), handler)
         thread = threading.Thread(target=httpd.serve_forever, daemon=True)
         thread.start()
         base = f"http://127.0.0.1:{httpd.server_address[1]}/"
-        manifest = {"fps": FPS, "size": SIZE, "states": {}}
         try:
             page = browser.new_page(
                 viewport={"width": 900, "height": 900}
@@ -183,7 +225,7 @@ def run(src, name, out):
                         os.path.join(state_dir, f"frame_{i:04d}.png"), "wb"
                     ) as f:
                         f.write(png)
-                manifest["states"][state] = {
+                group_states[state] = {
                     "duration": round(duration * 1000),
                     "count": len(urls),
                     "bbox": result["bbox"] or [0, 0, SIZE - 1, SIZE - 1],
@@ -194,9 +236,8 @@ def run(src, name, out):
             httpd.shutdown()
             browser.close()
 
-    with open(
-        os.path.join(pet_dir, "manifest.json"), "w", encoding="utf-8"
-    ) as f:
+    manifest["groups"][group_label] = group_states
+    with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
     print("manifest", json.dumps(manifest, ensure_ascii=False, indent=2))
 
@@ -205,9 +246,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--src", required=True, help="directory with WebM files")
     parser.add_argument("--name", required=True, help="operator name")
+    parser.add_argument("--group", default=None, help="model group filter for filenames")
     parser.add_argument("--out", required=True, help="pet directory to write")
     args = parser.parse_args()
-    run(args.src, args.name, args.out)
+    run(args.src, args.name, args.out, args.group)
 
 
 if __name__ == "__main__":

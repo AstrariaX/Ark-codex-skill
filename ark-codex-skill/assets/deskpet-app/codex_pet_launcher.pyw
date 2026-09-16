@@ -16,7 +16,7 @@ DISABLED_FLAG = os.path.join(BASE_DIR, "pet_disabled.flag")
 TRAY_STOP_FLAG = os.path.join(BASE_DIR, "tray_stop.flag")
 WATCHER_EXIT_FLAG = os.path.join(BASE_DIR, "watcher_exit.flag")
 POLL_SECONDS = 3
-HOST_NAMES = {"chatgpt.exe", "codex.exe"}
+HOST_NAMES = {"chatgpt.exe", "codex.exe", "claude.exe"}
 
 TH32CS_SNAPPROCESS = 0x00000002
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
