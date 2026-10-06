@@ -16,6 +16,8 @@
 - 一键生成桌面和开始菜单的“打开桌宠 / 启动托盘”快捷方式
 - 项目模板初始自带予愿安洁莉娜，生成后可以直接启动
 - 生成的项目自带完整桌宠程序：状态字幕、拖动、锁定、迷你模式、全屏自动隐藏、按角色记忆位置/大小/倍速、随 ChatGPT/Codex 启动
+- 字幕超出宽度时自动循环滚动，短字幕居中，悬停查看完整字幕
+- 可选择动作循环区间并生成透明过渡帧，减少录制片段首尾的跳变
 
 ## 监听器说明
 
@@ -59,6 +61,7 @@ ark-codex-skill/
     │   ├── setup_env.py         # 创建 .venv 并安装依赖
     │   ├── prts_export.py       # 从 PRTS 导出 WebM
     │   ├── process_webm.py      # WebM 转透明 PNG 帧
+    │   ├── prepare_loops.py     # 选择循环区间并补透明过渡帧
     │   └── create_shortcuts.py  # 创建桌面/开始菜单快捷方式
     ├── references/
     │   └── prts-ui.md           # PRTS 查看器 DOM 参考
@@ -126,6 +129,10 @@ ark-codex-skill/
 
 ## 常见问题
 
+### 字幕太长或动作循环突兀
+
+字幕自动滚动显示当前预设组成的文字，运行时长和Token更新不会让滚动反复回到开头。动作循环可在抽帧后用`ark-codex-skill/scripts/prepare_loops.py`处理，具体依赖、命令和预览要求见[动作循环说明](ark-codex-skill/references/animation-loops.md)。自动选择需要视觉确认，也支持手动指定循环区间。
+
 ### PRTS 导出失败或按钮找不到
 
 PRTS 页面改版会影响脚本。先看 `ark-codex-skill/references/prts-ui.md` 里的 DOM 说明，再同步更新 `ark-codex-skill/scripts/prts_export.py` 的选择器。
@@ -153,3 +160,14 @@ PRTS 页面改版会影响脚本。先看 `ark-codex-skill/references/prts-ui.md
 ## 贡献
 
 欢迎提交 PR 修复 PRTS 页面变动、增加新动画映射、优化抽帧速度或补充平台适配。
+
+字幕和循环处理的测试可在Windows的独立虚拟环境中运行。
+
+```powershell
+python -m venv .venv
+.venv/Scripts/python.exe -m pip install PySide6 pytest ruff -r ark-codex-skill/scripts/requirements-loops.txt
+.venv/Scripts/python.exe -m pytest -q tests
+.venv/Scripts/ruff.exe check --isolated --select E4,E7,E9,F ark-codex-skill/assets/deskpet-app/main.py ark-codex-skill/scripts/prepare_loops.py tests
+```
+
+测试覆盖字幕滚动的停留和循环、状态刷新不重置位置、短字幕居中、循环播放和单次播放的区别，以及补帧保留透明通道、原始帧和重复处理行为。桌宠窗口测试使用Windows图形后端，其他平台会跳过这些测试。

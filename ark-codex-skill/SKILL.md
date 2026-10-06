@@ -12,6 +12,7 @@ Build a transparent Codex deskpet from PRTS operator models and add it to a reus
 1. Confirm operator name and optional skin. If no skin is given, use the default (默认).
 2. Resolve the operator page title on PRTS, then export base (基建) WebM animations: `Default`, `Interact`, `Move`, `Relax`, `Sit`, `Sleep`.
 3. Process the WebM files into 1000x1000 transparent PNG frames at 20fps and write `pets/<operator>/manifest.json`.
+   If a repeating animation jumps at the seam, prepare its loop interval and transition frames with `scripts/prepare_loops.py`, then visually preview the result. See `references/animation-loops.md` for dependencies and manual interval selection.
 4. Add the pet to the deskpet library and launch it. The app supports right-click switching through the `桌宠库` menu.
 
 ## Quick Start on a Fresh Machine
@@ -39,6 +40,7 @@ python scripts/process_webm.py --src <project-dir>/work/webm --name "<operator>"
 - `scripts/setup_env.py` creates `.venv`, installs `PySide6` and `playwright`, and optionally installs Playwright Chromium.
 - `scripts/prts_export.py` automates the PRTS model viewer: loads the model, selects skin/model group/animation, and downloads WebM files.
 - `scripts/process_webm.py` decodes WebM in Chromium, extracts transparent PNG frames, computes bounding boxes, and writes the pet manifest.
+- `scripts/prepare_loops.py` selects repeating frame intervals and appends optical-flow transitions for idle, move, sit, and sleep. It has optional processing dependencies in `scripts/requirements-loops.txt`.
 - `scripts/create_shortcuts.py` creates 打开桌宠 shortcuts on the Desktop and in the Start Menu.
 
 ## Notes

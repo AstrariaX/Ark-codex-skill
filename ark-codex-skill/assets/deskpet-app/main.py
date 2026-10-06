@@ -192,9 +192,7 @@ def set_autostart(enabled):
         try:
             if enabled:
                 command = f'"{PYW_PATH}" "{WATCHER_PATH}"'
-                winreg.SetValueEx(
-                    key, RUN_VALUE_NAME, 0, winreg.REG_SZ, command
-                )
+                winreg.SetValueEx(key, RUN_VALUE_NAME, 0, winreg.REG_SZ, command)
             else:
                 try:
                     winreg.DeleteValue(key, RUN_VALUE_NAME)
@@ -326,9 +324,7 @@ class SettingsDialog(QDialog):
 class PetWindow(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowFlags(
-            Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
-        )
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_NoSystemBackground)
         self.setMouseTracking(True)
@@ -338,9 +334,7 @@ class PetWindow(QWidget):
         pet_states = self.settings.get("pet_states") or {}
         pet_state = pet_states.get(self.pet_name, {})
         self.pet_state = pet_state
-        self.speed = float(
-            pet_state.get("speed", self.settings.get("speed", 1.0))
-        )
+        self.speed = float(pet_state.get("speed", self.settings.get("speed", 1.0)))
         self.show_status = not bool(self.settings.get("mini_mode", False))
         self.auto_hide_fullscreen = bool(
             self.settings.get("auto_hide_fullscreen", False)
@@ -349,9 +343,7 @@ class PetWindow(QWidget):
         self.subtitle_size = max(
             14, min(26, int(self.settings.get("subtitle_size", 19)))
         )
-        self.bar_length = max(
-            40, min(100, int(self.settings.get("bar_length", 100)))
-        )
+        self.bar_length = max(40, min(100, int(self.settings.get("bar_length", 100))))
         self.locked = bool(self.settings.get("locked", True))
 
         self.state = "idle"
@@ -360,11 +352,7 @@ class PetWindow(QWidget):
             MIN_SCALE,
             min(
                 MAX_SCALE,
-                float(
-                    pet_state.get(
-                        "scale", self.settings.get("scale", 1.0)
-                    )
-                ),
+                float(pet_state.get("scale", self.settings.get("scale", 1.0))),
             ),
         )
         self.cache = {}
@@ -378,6 +366,15 @@ class PetWindow(QWidget):
         self.status_text = "Codex 待机"
         self.status_active = False
         self.tray_hidden = False
+        self.subtitle_offset = 0.0
+        self.subtitle_scroll_key = None
+        self.subtitle_last_tick = time.monotonic()
+        self.subtitle_pause_until = self.subtitle_last_tick + 1.2
+
+        self.subtitle_timer = QTimer(self)
+        self.subtitle_timer.setInterval(30)
+        self.subtitle_timer.timeout.connect(self.scroll_subtitle)
+        self.subtitle_timer.start()
 
         self.timer = QTimer(self)
         self.timer.setInterval(self.tick_ms())
@@ -386,15 +383,11 @@ class PetWindow(QWidget):
 
         self.sit_timer = QTimer(self)
         self.sit_timer.setSingleShot(True)
-        self.sit_timer.timeout.connect(
-            lambda: self.set_state("sit", hold=True)
-        )
+        self.sit_timer.timeout.connect(lambda: self.set_state("sit", hold=True))
 
         self.sleep_timer = QTimer(self)
         self.sleep_timer.setSingleShot(True)
-        self.sleep_timer.timeout.connect(
-            lambda: self.set_state("sleep", hold=True)
-        )
+        self.sleep_timer.timeout.connect(lambda: self.set_state("sleep", hold=True))
 
         self.status_timer = QTimer(self)
         self.status_timer.setInterval(2000)
@@ -464,7 +457,9 @@ class PetWindow(QWidget):
             return
         self.state = name
         self.hold_state = hold
-        self.frame_index = 0
+        sequence = self.state_info(name).get("loop_frames")
+        looping = hold or name in ("idle", "move")
+        self.frame_index = sequence[0] if looping and sequence else 0
         self.cache.clear()
         self.apply_geometry()
         self.schedule_idle()
@@ -495,7 +490,14 @@ class PetWindow(QWidget):
 
     def next_frame(self):
         info = self.state_info(self.state)
-        count = info["count"]
+        sequence = info.get("loop_frames")
+        looping = self.hold_state or self.state in ("idle", "move")
+        if looping and sequence:
+            index = sequence.index(self.frame_index)
+            self.frame_index = sequence[(index + 1) % len(sequence)]
+            self.update()
+            return
+        count = info.get("source_count", info["count"])
         if self.state == "sleep":
             if not self.hold_state and self.frame_index >= count - 1:
                 self.update()
@@ -508,6 +510,44 @@ class PetWindow(QWidget):
             self.frame_index = (self.frame_index + 1) % count
         else:
             self.frame_index = (self.frame_index + 1) % count
+        self.update()
+
+    def subtitle_font(self):
+        font = QFont()
+        font.setPixelSize(self.subtitle_size)
+        return font
+
+    def subtitle_bar(self):
+        available = self.width() - 12
+        width = min(available, max(120, int(available * self.bar_length / 100.0)))
+        return QRectF((self.width() - width) / 2, 4, width, STATUS_H - 8)
+
+    def reset_subtitle_scroll(self):
+        self.subtitle_offset = 0.0
+        self.subtitle_last_tick = time.monotonic()
+        self.subtitle_pause_until = self.subtitle_last_tick + 1.2
+
+    def scroll_subtitle(self):
+        now = time.monotonic()
+        elapsed = now - self.subtitle_last_tick
+        self.subtitle_last_tick = now
+        if not self.show_status or not self.isVisible():
+            return
+        text_width = QFontMetrics(self.subtitle_font()).horizontalAdvance(
+            self.status_text
+        )
+        available = self.subtitle_bar().width() - 16
+        if text_width <= available:
+            if self.subtitle_offset:
+                self.subtitle_offset = 0.0
+                self.update()
+            return
+        if now < self.subtitle_pause_until:
+            return
+        self.subtitle_offset += 24 * elapsed
+        if self.subtitle_offset >= text_width + 32:
+            self.subtitle_offset = 0.0
+            self.subtitle_pause_until = now + 1.2
         self.update()
 
     def paintEvent(self, event):
@@ -527,10 +567,7 @@ class PetWindow(QWidget):
             painter.drawImage(target, image)
 
         if self.show_status:
-            bar_width = max(
-                120, int((self.width() - 12) * self.bar_length / 100.0)
-            )
-            bar = QRectF(6, 4, bar_width, STATUS_H - 8)
+            bar = self.subtitle_bar()
             if self.status_active:
                 painter.setBrush(QColor(30, 120, 70, 190))
             else:
@@ -538,19 +575,30 @@ class PetWindow(QWidget):
             painter.setPen(Qt.NoPen)
             painter.drawRoundedRect(bar, 8, 8)
 
-            font = QFont()
-            font.setPixelSize(self.subtitle_size)
+            font = self.subtitle_font()
             painter.setFont(font)
             metrics = QFontMetrics(font)
-            elided = metrics.elidedText(
-                self.status_text, Qt.ElideRight, int(bar.width() - 16)
-            )
+            text_rect = bar.adjusted(8, 0, -8, 0)
+            text_width = metrics.horizontalAdvance(self.status_text)
+            painter.save()
+            painter.setClipRect(text_rect)
             painter.setPen(QColor(255, 255, 255))
-            painter.drawText(
-                bar.adjusted(8, 0, -8, 0),
-                Qt.AlignVCenter | Qt.AlignLeft,
-                elided,
-            )
+            if text_width <= text_rect.width():
+                painter.drawText(
+                    text_rect, Qt.AlignVCenter | Qt.AlignHCenter, self.status_text
+                )
+            else:
+                for offset in (0, text_width + 32):
+                    rect = QRectF(
+                        text_rect.x() - self.subtitle_offset + offset,
+                        text_rect.y(),
+                        text_width + 2,
+                        text_rect.height(),
+                    )
+                    painter.drawText(
+                        rect, Qt.AlignVCenter | Qt.AlignLeft, self.status_text
+                    )
+            painter.restore()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -647,9 +695,7 @@ class PetWindow(QWidget):
         for name in list_pets():
             action = QAction(name, self, checkable=True)
             action.setChecked(name == self.pet_name)
-            action.triggered.connect(
-                lambda checked=False, n=name: self.select_pet(n)
-            )
+            action.triggered.connect(lambda checked=False, n=name: self.select_pet(n))
             pet_menu.addAction(action)
         menu.addSeparator()
         mini_action = QAction("迷你模式（隐藏字幕）", self, checkable=True)
@@ -674,12 +720,8 @@ class PetWindow(QWidget):
         menu.addAction(QAction("放大", self, triggered=self.scale_up))
         menu.addAction(QAction("缩小", self, triggered=self.scale_down))
         menu.addSeparator()
-        menu.addAction(
-            QAction("隐藏到托盘", self, triggered=self.hide_to_tray)
-        )
-        menu.addAction(
-            QAction("完全退出", self, triggered=self.quit_pet)
-        )
+        menu.addAction(QAction("隐藏到托盘", self, triggered=self.hide_to_tray))
+        menu.addAction(QAction("完全退出", self, triggered=self.quit_pet))
         menu.exec(event.globalPos())
 
     def scale_up(self):
@@ -706,16 +748,10 @@ class PetWindow(QWidget):
             MIN_SCALE,
             min(
                 MAX_SCALE,
-                float(
-                    pet_state.get(
-                        "scale", self.settings.get("scale", 1.0)
-                    )
-                ),
+                float(pet_state.get("scale", self.settings.get("scale", 1.0))),
             ),
         )
-        self.speed = float(
-            pet_state.get("speed", self.settings.get("speed", 1.0))
-        )
+        self.speed = float(pet_state.get("speed", self.settings.get("speed", 1.0)))
         self.cache.clear()
         self.timer.setInterval(self.tick_ms())
         self.set_state("idle", hold=False)
@@ -850,6 +886,7 @@ class PetWindow(QWidget):
         self.bar_length = int(data["bar_length"])
         self.show_status = not bool(data["mini_mode"])
         self.auto_hide_fullscreen = bool(data["auto_hide_fullscreen"])
+        self.reset_subtitle_scroll()
         self.timer.setInterval(self.tick_ms())
         if bool(data["autostart_with_codex"]) != old_autostart:
             if not set_autostart(bool(data["autostart_with_codex"])):
@@ -912,9 +949,7 @@ class PetWindow(QWidget):
             return
         status = codex_monitor.get_codex_status()
         self.status_active = bool(status.get("active"))
-        level = SUBTITLE_LEVELS.get(
-            self.subtitle_length, SUBTITLE_LEVELS["medium"]
-        )
+        level = SUBTITLE_LEVELS.get(self.subtitle_length, SUBTITLE_LEVELS["medium"])
         if self.status_active:
             base = "Codex 运行中"
         else:
@@ -942,6 +977,11 @@ class PetWindow(QWidget):
             if progress:
                 parts.append(self._cut(progress, 80))
         self.status_text = " · ".join(parts)
+        scroll_key = (self.status_active, task, self.subtitle_length)
+        if scroll_key != self.subtitle_scroll_key:
+            self.subtitle_scroll_key = scroll_key
+            self.reset_subtitle_scroll()
+        self.setToolTip(self.status_text)
         self.update()
 
 

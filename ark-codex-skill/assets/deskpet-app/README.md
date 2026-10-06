@@ -62,6 +62,7 @@ python <skill目录>/scripts/create_shortcuts.py --project <桌宠项目目录>
 - 字幕长度：简短 / 标准 / 详细，控制头顶字幕显示多少 Codex 信息
 - 字幕大小：14-26px 滑块调节
 - 字条长度：40%-100% 滑块调节，控制头顶字幕条的宽度
+- 字幕溢出时自动横向循环滚动，短字幕居中；鼠标悬停可查看完整字幕
 - 迷你模式：隐藏字幕条，只显示小人
 - 全屏应用时自动隐藏：检测到全屏窗口时隐藏桌宠
 - 随 ChatGPT / Codex 启动：开启后会在当前用户注册表写入监听器，登录后检测到 ChatGPT 或 Codex 启动就拉起桌宠，应用退出时也会一起关闭桌宠
@@ -72,6 +73,8 @@ python <skill目录>/scripts/create_shortcuts.py --project <桌宠项目目录>
 - 简短：Codex 运行中 / 待机 + 最近任务
 - 标准：再加上当前模型、运行时长、Token 用量
 - 详细：再加上最近完成时间、最近运行进度
+
+字幕超出可用宽度时，先停留1.2秒，再以24px/秒滚动，循环之间留32px空隙。运行时长和Token更新不会反复重置滚动；任务、运行状态或字幕预设变化时回到开头。字幕预设仍控制字段和任务摘要长度，滚动展示的是该预设组成的完整字幕。
 
 桌宠只读 `~/.codex/sessions/` 下的会话记录，不会修改 Codex 的任何数据。
 
@@ -91,6 +94,8 @@ python <skill目录>/scripts/create_shortcuts.py --project <桌宠项目目录>
 - `Sleep` -> `sleep`（睡觉）
 
 PRTS 导出的 `Default` 文件是 110 字节的坏文件，所以没有使用。
+
+如果动作首尾衔接突兀，可用skill的`scripts/prepare_loops.py`选择循环区间并补透明过渡帧。处理后的`loop_frames`只用于持续循环，单次动作保留原始帧。具体命令见skill的`references/animation-loops.md`。
 
 ## 资源占用
 
